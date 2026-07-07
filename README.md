@@ -1,4 +1,4 @@
-# 2026 July 17th talk by Murali Jayaraman about AI for non-programmers
+# 2026 July 17th talk by Murali Jayaraman about "using AI"
 
 
 ## Talk title: From Workflows to multi-agent automation: The logical progression of AI in biology research
