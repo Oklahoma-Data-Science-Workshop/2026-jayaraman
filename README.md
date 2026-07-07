@@ -17,3 +17,4 @@ This presentation provides a practical map of that spectrum through four stages 
 
 ## Flyer
 
+![Here is the Flyer](https://github.com/Oklahoma-Data-Science-Workshop/2026-jayaraman/blob/main/images/hmgj.png)
