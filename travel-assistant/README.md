@@ -79,4 +79,4 @@ the app under a `/travel/` path with SSE buffering disabled (`proxy_buffering of
 — streaming breaks if the proxy buffers responses.
 
 ---
-Part of **[From Workflows to Multi-Agent Automation](../README.md)** — Murali Jayaraman, Oklahoma Data Science Workshop 2026. MIT licensed (see repository [LICENSE](../LICENSE)).
+Part of **[Workflow to Multi-Agentic Automation](../README.md)** — Murali Jayaraman, Oklahoma Data Science Workshop 2026. MIT licensed (see repository [LICENSE](../LICENSE)).

@@ -92,4 +92,4 @@ left in as a reference for anyone who wants to run classification inside Python
 instead of n8n.
 
 ---
-Part of **[From Workflows to Multi-Agent Automation](../README.md)** — Murali Jayaraman, Oklahoma Data Science Workshop 2026. MIT licensed (see repository [LICENSE](../LICENSE)).
+Part of **[Workflow to Multi-Agentic Automation](../README.md)** — Murali Jayaraman, Oklahoma Data Science Workshop 2026. MIT licensed (see repository [LICENSE](../LICENSE)).

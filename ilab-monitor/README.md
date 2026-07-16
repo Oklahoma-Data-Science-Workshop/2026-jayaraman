@@ -73,4 +73,4 @@ answer as plain text, so I can ask "who's using X" from anywhere. Any assistant
 that can make an HTTP request can do the same — point it at the endpoints above.
 
 ---
-Part of **[From Workflows to Multi-Agent Automation](../README.md)** — Murali Jayaraman, Oklahoma Data Science Workshop 2026. MIT licensed (see repository [LICENSE](../LICENSE)).
+Part of **[Workflow to Multi-Agentic Automation](../README.md)** — Murali Jayaraman, Oklahoma Data Science Workshop 2026. MIT licensed (see repository [LICENSE](../LICENSE)).
