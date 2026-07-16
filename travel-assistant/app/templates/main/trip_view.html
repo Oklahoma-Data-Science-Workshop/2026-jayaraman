@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+{% block title %}{{ session.title or 'Travel Plan' }} — Travel Assistant{% endblock %}
+
+{% block extra_style %}
+@media print {
+  .navbar, .no-print { display: none !important; }
+  .card { break-inside: avoid; page-break-inside: avoid; }
+  .accordion-collapse { display: block !important; height: auto !important; }
+  .accordion-button::after { display: none; }
+  body { background: white !important; }
+  .tab-pane { display: block !important; opacity: 1 !important; }
+  .nav-tabs { display: none !important; }
+}
+.hero-banner { background: linear-gradient(135deg, #0d6efd 0%, #0dcaf0 100%); color: white; padding: 2.5rem 0; }
+.price { font-weight: 700; color: #198754; }
+.flight-recommended { background: #d1ecf1; }
+.flight-recommended td:first-child::before { content: "★ "; color: #0dcaf0; font-weight: bold; }
+.comfort-no { color: #dc3545; font-size: .8rem; }
+.bg-purple { background-color: #6610f2 !important; }
+.section-card { margin-bottom: 1.5rem; }
+{% endblock %}
+
+{% block content %}
+
+<!-- Hero -->
+<div class="hero-banner text-center">
+  <div class="container">
+    <h2 class="fw-bold mb-2">
+      <i class="bi bi-airplane-fill me-2"></i>{{ session.title or 'Travel Plan' }}
+    </h2>
+    {% if by_section.get('route') and by_section['route'].get('reasoning') %}
+    <p class="mb-3 opacity-75">{{ by_section['route']['reasoning'] }}</p>
+    {% endif %}
+    <div class="no-print d-flex justify-content-center gap-2 flex-wrap">
+      <button class="btn btn-light btn-sm" onclick="copyLink(this)">
+        <i class="bi bi-clipboard me-1"></i><span>Copy Link</span>
+      </button>
+      <button class="btn btn-light btn-sm" onclick="window.print()">
+        <i class="bi bi-printer me-1"></i>Print / Save PDF
+      </button>
+      <a href="{{ url_for('main.index') }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-plus-circle me-1"></i>Plan Your Own Trip
+      </a>
+    </div>
+  </div>
+</div>
+
+<div class="container py-4" style="max-width:900px">
+
+  {# ── Route ── #}
+  {% if by_section.get('route') %}
+  {% set sec = by_section['route'] %}
+  <div class="card section-card shadow-sm">
+    <div class="card-header bg-primary text-white">
+      <i class="bi bi-signpost-split me-2"></i>Optimal Route
+    </div>
+    <div class="card-body">
+      <p class="fs-5 fw-semibold mb-1">{{ (sec.optimal_order or []) | join(' → ') }}</p>
+      {% if sec.reasoning %}<p class="text-muted mb-0">{{ sec.reasoning }}</p>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Flights ── #}
+  {% if by_section.get('flights') %}
+  {% set sec = by_section['flights'] %}
+  <div class="card section-card shadow-sm">
+    <div class="card-header bg-info text-white">
+      <i class="bi bi-airplane me-2"></i>Flights
+    </div>
+    <div class="card-body p-0">
+      {% for leg in (sec.legs or []) %}
+      <div class="p-3 {% if not loop.last %}border-bottom{% endif %}">
+        <h6 class="mb-1">
+          {{ leg.from }} → {{ leg.to }}
+          <span class="text-muted fw-normal">({{ leg.date or '' }})</span>
+        </h6>
+        {% if leg.time_pref %}
+        <div class="text-muted small mb-2"><i class="bi bi-clock me-1"></i>{{ leg.time_pref }}</div>
+        {% endif %}
+        <div class="table-responsive">
+          <table class="table table-bordered table-sm align-middle mb-0">
+            <thead class="table-light">
+              <tr><th>Flight</th><th>Departs</th><th>Arrives</th><th>Stops</th><th>Price</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+              {% set rec = leg.recommended or {} %}
+              {% if rec %}
+              {% set stops_label = 'Nonstop' if rec.stops == 0 else (rec.stops|string + ' stop' + ('' if rec.stops == 1 else 's')) %}
+              <tr class="flight-recommended">
+                <td><strong>{{ rec.airline or '' }}</strong><br><small class="text-muted">{{ rec.flight or '' }}</small></td>
+                <td>{{ rec.departs or '' }}</td>
+                <td>{{ rec.arrives or '' }}</td>
+                <td>{{ stops_label }}</td>
+                <td class="price">${{ rec.price_usd or '' }}</td>
+                <td><small>{{ rec.why or '' }}</small></td>
+              </tr>
+              {% endif %}
+              {% for alt in (leg.alternatives or []) %}
+              {% set alt_stops = 'Nonstop' if alt.stops == 0 else (alt.stops|string + ' stop' + ('' if alt.stops == 1 else 's')) %}
+              <tr>
+                <td>{{ alt.airline or '' }}</td>
+                <td>{{ alt.departs or '' }}</td>
+                <td>{{ alt.arrives or '' }}</td>
+                <td>{{ alt_stops }}</td>
+                <td class="price">${{ alt.price_usd or '' }}</td>
+                <td>
+                  {% if alt.comfort_match == false %}
+                  <span class="comfort-no"><i class="bi bi-exclamation-circle me-1"></i>{{ alt.note or 'Time preference mismatch' }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Itinerary ── #}
+  {% if by_section.get('itinerary') %}
+  {% set sec = by_section['itinerary'] %}
+  <div class="card section-card shadow-sm">
+    <div class="card-header bg-success text-white">
+      <i class="bi bi-calendar3 me-2"></i>Day-by-Day Itinerary
+    </div>
+    <div class="card-body p-0">
+      <div class="accordion accordion-flush" id="itin-acc">
+        {% for day in (sec.days or []) %}
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button {% if not loop.first %}collapsed{% endif %}"
+              type="button" data-bs-toggle="collapse" data-bs-target="#iday-{{ loop.index }}">
+              <strong class="me-2">Day {{ day.day }}</strong> — {{ day.city or '' }}
+              <span class="text-muted ms-2 fw-normal">{{ day.date or '' }}</span>
+            </button>
+          </h2>
+          <div id="iday-{{ loop.index }}"
+               class="accordion-collapse collapse {% if loop.first %}show{% endif %}"
+               data-bs-parent="#itin-acc">
+            <div class="accordion-body">
+              <ul class="mb-0">
+                {% for act in (day.activities or []) %}
+                <li>{{ act }}</li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Budget ── #}
+  {% if by_section.get('budget') %}
+  {% set sec = by_section['budget'] %}
+  <div class="card section-card shadow-sm">
+    <div class="card-header bg-warning text-dark">
+      <i class="bi bi-wallet2 me-2"></i>Budget Breakdown
+    </div>
+    <div class="card-body">
+      <div class="table-responsive mb-3">
+        <table class="table table-bordered">
+          <thead class="table-light"><tr><th>Category</th><th class="text-end">Amount</th></tr></thead>
+          <tbody>
+            {% for row in (sec.breakdown or []) %}
+            <tr><td>{{ row.category }}</td><td class="text-end price">{{ row.amount }}</td></tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="table-dark">
+              <td><strong>Total Estimate</strong></td>
+              <td class="text-end"><strong>{{ sec.total_range or '' }}</strong></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {% for tip in (sec.tips or []) %}
+      <div class="alert alert-light border mb-2 py-2">
+        <i class="bi bi-lightbulb me-2 text-warning"></i>{{ tip }}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Ground Connections ── #}
+  {% if by_section.get('connections') %}
+  {% set sec = by_section['connections'] %}
+  <div class="card section-card shadow-sm">
+    <div class="card-header text-white" style="background-color:#fd7e14">
+      <i class="bi bi-train-front-fill me-2"></i>Ground Connections &amp; Local Apps
+    </div>
+    <div class="card-body">
+
+      {% if sec.city_pairs %}
+      <h6 class="mb-3"><i class="bi bi-train-front-fill text-warning me-2"></i>Train &amp; Transit Connections</h6>
+      {% for p in sec.city_pairs %}
+      <div class="border rounded p-3 mb-3">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+          <div>
+            <span class="fw-bold">{{ p.from }} → {{ p.to }}</span>
+            <span class="badge bg-warning text-dark ms-2">{{ p.recommended_transport or 'train' }}</span>
+          </div>
+          <span class="text-success fw-bold">{{ p.price_range or '' }}</span>
+        </div>
+        <div class="text-muted small mb-2">
+          {% if p.service_name %}<strong>{{ p.service_name }}</strong> · {% endif %}
+          {{ p.operator or '' }}{% if p.duration %} · {{ p.duration }}{% endif %}
+          {% if p.frequency %} · {{ p.frequency }}{% endif %}
+        </div>
+        {% if p.booking_platform %}
+        <div class="mb-2 small">
+          <i class="bi bi-ticket-perforated me-1 text-primary"></i>
+          Book on: <strong>{{ p.booking_platform }}</strong>
+          {% if p.book_ahead %} · {{ p.book_ahead }}{% endif %}
+        </div>
+        {% endif %}
+        {% if p.tips %}
+        <ul class="small mb-2">{% for t in p.tips %}<li>{{ t }}</li>{% endfor %}</ul>
+        {% endif %}
+        {% if p.alternatives %}
+        <div class="small">
+          <span class="text-muted me-1">Alternatives:</span>
+          {% for a in p.alternatives %}
+          <span class="badge bg-light text-dark border me-1">
+            {{ a.type }}: {{ a.operator }} · {{ a.duration }} · {{ a.price_range }}
+            {% if a.note %} — {{ a.note }}{% endif %}
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      {% if sec.country_apps %}
+      <h6 class="mt-4 mb-3"><i class="bi bi-phone-fill text-info me-2"></i>Essential Apps to Download</h6>
+      <div class="row g-3">
+        {% for c in sec.country_apps %}
+        <div class="col-md-6">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body p-3">
+              <h6 class="mb-3">{{ c.flag or '' }} {{ c.country }}</h6>
+              {% for app in (c.apps or []) %}
+              {% set cat_colors = {"Trains": "danger", "Metro/Bus": "primary", "Navigation": "success", "Ride-share": "warning", "Transit card": "info", "Intercity bus": "secondary"} %}
+              <div class="d-flex align-items-start mb-2">
+                <span class="badge bg-{{ cat_colors.get(app.category, 'secondary') }} me-2 flex-shrink-0" style="font-size:.7rem;margin-top:2px">{{ app.category }}</span>
+                <div>
+                  <strong>{{ app.name }}</strong>
+                  <div class="text-muted" style="font-size:.82rem">{{ app.why }}</div>
+                  {% if app.platforms %}<div class="text-muted" style="font-size:.75rem">{{ app.platforms }}</div>{% endif %}
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Destination Guide ── #}
+  {% if by_section.get('destinations') %}
+  {% set sec = by_section['destinations'] %}
+  <div class="card section-card shadow-sm">
+    <div class="card-header bg-purple text-white">
+      <i class="bi bi-geo-alt-fill me-2"></i>Destination Guide
+    </div>
+    <div class="card-body">
+      <ul class="nav nav-tabs mb-3 no-print" id="dest-tabs">
+        {% for city in (sec.cities or []) %}
+        <li class="nav-item">
+          <a class="nav-link {% if loop.first %}active{% endif %}"
+             data-bs-toggle="tab" href="#dview-{{ loop.index }}">{{ city.city }}</a>
+        </li>
+        {% endfor %}
+      </ul>
+      <div class="tab-content">
+        {% for city in (sec.cities or []) %}
+        <div class="tab-pane fade {% if loop.first %}show active{% endif %}" id="dview-{{ loop.index }}">
+          <p class="text-muted fst-italic mb-3">{{ city.tagline or '' }}</p>
+          <div class="row g-3">
+            <div class="col-md-6">
+              {% if city.must_do %}
+              <h6><i class="bi bi-star-fill text-warning me-1"></i>Must Do</h6>
+              <ul>{% for x in city.must_do %}<li>{{ x }}</li>{% endfor %}</ul>
+              {% endif %}
+              {% if city.hidden_gems %}
+              <h6><i class="bi bi-gem text-info me-1"></i>Hidden Gems</h6>
+              <ul>{% for x in city.hidden_gems %}<li>{{ x }}</li>{% endfor %}</ul>
+              {% endif %}
+              {% if city.skip %}
+              <h6><i class="bi bi-x-circle text-danger me-1"></i>Skip</h6>
+              <ul>{% for x in city.skip %}<li>{{ x }}</li>{% endfor %}</ul>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              {% if city.food %}
+              <h6><i class="bi bi-egg-fried text-success me-1"></i>Food</h6>
+              <p>
+                <strong>Try:</strong> {{ (city.food.signature_dishes or []) | join(', ') }}<br>
+                <strong>Best area:</strong> {{ city.food.best_neighborhood_to_eat or '' }}
+              </p>
+              {% endif %}
+              {% if city.practical %}
+              <h6><i class="bi bi-info-circle me-1"></i>Practical</h6>
+              <ul>
+                {% if city.practical.transport %}<li>{{ city.practical.transport }}</li>{% endif %}
+                {% if city.practical.language_tip %}<li>{{ city.practical.language_tip }}</li>{% endif %}
+                {% if city.practical.best_time_of_day %}<li>{{ city.practical.best_time_of_day }}</li>{% endif %}
+              </ul>
+              {% endif %}
+              {% if city.day_trips %}
+              <h6><i class="bi bi-train-front me-1"></i>Day Trips</h6>
+              <ul>
+                {% for t in city.day_trips %}
+                <li><strong>{{ t.destination }}</strong> — {{ t.why }}</li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+              {% if city.seasonal_note %}
+              <div class="alert alert-light border py-2">
+                <i class="bi bi-calendar-event me-2 text-primary"></i>{{ city.seasonal_note }}
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Footer -->
+  <div class="text-center text-muted small py-3 no-print border-top mt-2">
+    Created with <a href="{{ url_for('main.index') }}">Travel Assistant</a>
+    <span class="mx-2">·</span>
+    <form action="{{ url_for('main.new_trip') }}" method="post" class="d-inline">
+      <button class="btn btn-primary btn-sm ms-1">
+        <i class="bi bi-plus-circle me-1"></i>Plan Your Own Trip
+      </button>
+    </form>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copyLink(btn) {
+  navigator.clipboard.writeText(window.location.href).then(() => {
+    const span = btn.querySelector("span");
+    span.textContent = "Copied!";
+    btn.classList.replace("btn-light", "btn-success");
+    setTimeout(() => {
+      span.textContent = "Copy Link";
+      btn.classList.replace("btn-success", "btn-light");
+    }, 2000);
+  });
+}
+</script>
+{% endblock %}

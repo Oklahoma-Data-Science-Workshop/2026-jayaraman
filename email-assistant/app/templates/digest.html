@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Vendor Digest{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center flex-wrap mb-2">
+  <h3 class="mb-0">📰 Vendor Digest</h3>
+  <span class="ms-3 text-secondary">{{ vendor_count }} vendor{{ '' if vendor_count == 1 else 's' }} · {{ total }} update{{ '' if total == 1 else 's' }} · {{ window_label }}</span>
+</div>
+<p class="text-secondary mb-3" style="max-width:72ch">
+  What your vendors have been sending — grouped by company and assembled from the summaries the assistant already extracted. Awareness only; nothing here needs a reply.
+</p>
+
+<div class="card mb-4" style="border-left:3px solid var(--accent)">
+  <div class="card-body py-3">
+    <div class="d-flex align-items-center mb-1">
+      <strong style="font-size:13px">📝 This week in a nutshell</strong>
+      <button id="regenBtn" class="btn btn-sm btn-outline-secondary ms-auto">↻ {{ 'Regenerate' if overview else 'Generate' }}</button>
+    </div>
+    <div id="overviewText" style="font-size:13.5px;line-height:1.55;color:var(--text-primary)">
+      {% if overview %}{{ overview }}{% else %}<span class="text-secondary fst-italic">Generate a one-paragraph AI summary of the week's vendor activity — one quick Haiku call.</span>{% endif %}
+    </div>
+    <div id="overviewMeta" class="text-secondary mt-1" style="font-size:11px">{% if overview_at %}Generated {{ overview_at }}{% endif %}</div>
+  </div>
+</div>
+
+{% if not vendors %}
+  <div class="card p-4 text-secondary">No vendor emails in this window yet. New ones appear here automatically as they're classified.</div>
+{% endif %}
+
+<div class="row g-3">
+{% for v in vendors %}
+  <div class="col-lg-6">
+    <div class="card h-100" style="border-left:3px solid #6366f1">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-1">
+          <span class="badge me-2" style="background:#6366f1">Vendor</span>
+          <strong>{{ v.brand }}</strong>
+          <span class="badge bg-secondary ms-auto">{{ v.emails|length }}</span>
+        </div>
+        <div class="text-secondary small mb-3">
+          {{ v.domain }}{% if v.sender_count > 1 %} · {{ v.sender_count }} senders{% endif %}
+        </div>
+        {% for e in v.emails %}
+          <div {% if not loop.last %}class="pb-2 mb-2" style="border-bottom:1px solid var(--border-color)"{% endif %}>
+            <a href="{{ url_for('emails.detail', id=e.id) }}" style="color:var(--accent);text-decoration:none">
+              {{ e.subject or '(no subject)' }}
+            </a>
+            {% if e.summary %}<div class="small text-secondary mt-1">{{ e.summary }}</div>{% endif %}
+            {% if e.key_points_list %}
+            <ul class="small text-secondary mt-1 mb-0" style="padding-left:1.1rem">
+              {% for kp in e.key_points_list[:3] %}<li>{{ kp }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+{% endfor %}
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  (function () {
+    var btn = document.getElementById('regenBtn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      var txt = document.getElementById('overviewText');
+      var meta = document.getElementById('overviewMeta');
+      var url = '{{ url_for('main.digest_overview') }}';
+      btn.disabled = true; btn.textContent = 'Generating…';
+      fetch(url, { method: 'POST', headers: { 'X-Requested-With': 'fetch' } })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          btn.disabled = false; btn.textContent = '↻ Regenerate';
+          if (res.ok && res.d.ok) {
+            txt.classList.remove('fst-italic', 'text-secondary');
+            txt.textContent = res.d.text;
+            meta.textContent = 'Generated ' + res.d.generated_at;
+          } else {
+            txt.textContent = 'Could not generate summary: ' + ((res.d && res.d.error) || 'error');
+          }
+        })
+        .catch(function () {
+          btn.disabled = false; btn.textContent = '↻ Regenerate';
+          document.getElementById('overviewText').textContent = 'Could not generate summary (network error).';
+        });
+    });
+  })();
+</script>
+{% endblock %}

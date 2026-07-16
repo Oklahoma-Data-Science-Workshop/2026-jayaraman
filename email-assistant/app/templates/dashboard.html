@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Command Center{% endblock %}
+{% block extra_css %}
+<style>
+  .cc-tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
+  @media(max-width:991px){.cc-tiles{grid-template-columns:repeat(2,1fr)}}
+  .tile{position:relative;overflow:hidden;background:var(--bg-card);border:1px solid var(--border-color);border-radius:12px;padding:14px 15px}
+  .tile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--stripe,#6b7280)}
+  .tile .k{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-secondary)}
+  .tile .v{font-size:28px;font-weight:600;line-height:1.1;margin:6px 0 2px;font-variant-numeric:tabular-nums}
+  .tile .s{font-size:12px;color:var(--text-secondary)}
+  .tile .s b{color:var(--stripe)}
+  .cc-card{background:var(--bg-card);border:1px solid var(--border-color);border-radius:12px;margin-bottom:16px;overflow:hidden}
+  .cc-card > h6{font-size:13px;font-weight:700;margin:0;padding:13px 15px 9px;display:flex;align-items:center;gap:8px}
+  .cc-card > h6 .cnt{font-size:11px;color:var(--text-secondary);background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:20px;padding:1px 8px}
+  .cc-card > h6 a{margin-left:auto;font-size:12px;color:var(--accent);text-decoration:none}
+  .mail{display:block;position:relative;padding:12px 15px 12px 18px;border-top:1px solid var(--border-color);text-decoration:none;color:inherit}
+  .mail::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:3px;background:var(--sv,#6b7280)}
+  .mail:hover{background:var(--bg-secondary)}
+  .mail .r1{display:flex;align-items:center;gap:8px}
+  .mail .subj{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .b{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:2px 7px;border-radius:6px}
+  .topic{font-size:10px;font-weight:600;color:#fff;padding:2px 8px;border-radius:20px;white-space:nowrap}
+  .mail .from{font-size:12px;color:var(--text-secondary);margin:2px 0 4px}
+  .mail .snip{font-size:12px;color:var(--text-secondary);opacity:.85;line-height:1.4}
+  .task{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:start;padding:10px 15px;border-top:1px solid var(--border-color)}
+  .pri{width:8px;height:8px;border-radius:50%;margin-top:5px;flex:none}
+  .task .desc{font-size:13px;font-weight:500}
+  .task .meta{font-size:11.5px;color:var(--text-secondary);margin-top:3px}
+  .task .due{font-size:12px;color:var(--text-secondary);white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right}
+  .task .due.over{color:#ef4444;font-weight:600}
+  .kind{font-size:10px;color:var(--text-secondary);background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:20px;padding:1px 7px}
+  .tl{display:grid;grid-template-columns:52px 1fr;gap:10px;padding:9px 15px;border-top:1px solid var(--border-color)}
+  .tl .d{font-size:12px;text-align:right;color:var(--text-secondary);font-variant-numeric:tabular-nums;padding-top:1px}
+  .tl.over .d{color:#ef4444}
+  .tl .t{font-size:13px;font-weight:500}
+  .tl .w{font-size:11.5px;color:var(--text-secondary);margin-top:2px}
+  .bars{padding:8px 15px 14px;display:flex;flex-direction:column;gap:9px}
+  .bar{display:grid;grid-template-columns:94px 1fr 28px;gap:10px;align-items:center;font-size:12px}
+  .bar .lab{color:var(--text-secondary);display:flex;align-items:center;gap:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sw{width:9px;height:9px;border-radius:3px;flex:none}
+  .track{height:8px;border-radius:6px;background:var(--bg-secondary);overflow:hidden}
+  .fill{height:100%;border-radius:6px}
+  .bar .n{text-align:right;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+  .sender{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:8px 15px;border-top:1px solid var(--border-color)}
+  .sender .nm{font-size:13px;font-weight:500}
+  .sender .em{font-size:11px;color:var(--text-secondary)}
+  .sender .vol{font-size:12px;color:var(--text-secondary);background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:20px;padding:1px 8px}
+</style>
+{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <h3 class="mb-0">🗂️ Command Center</h3>
+  <span class="ms-3 text-secondary">{{ today.strftime('%A, %b %d') }}</span>
+</div>
+
+<div class="cc-tiles">
+  <div class="tile" style="--stripe:#f59e0b"><div class="k">Needs action</div><div class="v">{{ needs_action }}</div><div class="s">awaiting you</div></div>
+  <div class="tile" style="--stripe:#ef4444"><div class="k">Due this week</div><div class="v">{{ due_week }}</div><div class="s">{% if overdue %}<b>{{ overdue }} overdue</b>{% else %}on track{% endif %}</div></div>
+  <div class="tile" style="--stripe:#3b82f6"><div class="k">Awaiting reply</div><div class="v">{{ awaiting_reply }}</div><div class="s">no draft yet</div></div>
+  <div class="tile" style="--stripe:#ef4444"><div class="k">Critical</div><div class="v">{{ critical }}</div><div class="s">urgent items</div></div>
+  <div class="tile" style="--stripe:#10b981"><div class="k">Open tasks</div><div class="v">{{ open_tasks }}</div><div class="s"><b>{{ high_tasks }}</b> high priority</div></div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="cc-card">
+      <h6>🔺 {{ 'Urgent' if triage_fallback else 'Needs action' }} <span class="cnt">{{ triage|length }}</span><a href="{{ url_for('emails.list', status='needs_action') }}">View all →</a></h6>
+      {% for e in triage %}
+        {% set sv = '#ef4444' if e.urgency == 'critical' else ('#f59e0b' if e.urgency == 'important' else '#3b82f6') %}
+        <a class="mail" style="--sv:{{ sv }}" href="{{ url_for('emails.detail', id=e.id) }}">
+          <div class="r1">
+            <span class="subj">{{ e.subject or '(no subject)' }}</span>
+            <span class="b" style="color:{{ sv }};background:{{ sv }}22">{{ e.urgency }}</span>
+            <span class="topic" style="background:{{ topic_colors.get(e.topic, '#6b7280') }}">{{ e.topic }}</span>
+            {% if e.vendor_category %}<span class="topic" style="background:{{ vendor_colors.get(e.vendor_category, '#6b7280') }}">{{ e.vendor_category }}</span>{% endif %}
+          </div>
+          <div class="from">{{ e.sender_name or e.sender_email }}</div>
+          {% if e.summary %}<div class="snip">{{ e.summary|truncate(160) }}</div>{% endif %}
+        </a>
+      {% else %}
+        <div class="p-3 text-secondary" style="border-top:1px solid var(--border-color)">Nothing needs action right now. 🎉</div>
+      {% endfor %}
+    </div>
+
+    <div class="cc-card">
+      <h6>✅ Action items <span class="cnt">{{ open_tasks }} open</span></h6>
+      {% for a in top_tasks %}
+        {% set pc = '#ef4444' if a.priority == 'high' else ('#f59e0b' if a.priority == 'medium' else '#6b7280') %}
+        <div class="task">
+          <span class="pri" style="background:{{ pc }}"></span>
+          <div>
+            <div class="desc">{{ a.description }}</div>
+            <div class="meta">{% if a.type %}<span class="kind">{{ a.type }}</span> {% endif %}{% if a.email %}· from {{ a.email.sender_name or a.email.sender_email }}{% endif %}</div>
+          </div>
+          <div class="due {% if a.due_date and a.due_date < today %}over{% endif %}">{% if a.due_date %}{{ a.due_date.strftime('%b %d') }}{% if a.due_date < today %} · overdue{% endif %}{% else %}—{% endif %}</div>
+        </div>
+      {% else %}
+        <div class="p-3 text-secondary" style="border-top:1px solid var(--border-color)">No open action items.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="cc-card">
+      <h6>📅 Deadlines <span class="cnt">{{ due_week }} this week</span></h6>
+      {% for a in deadlines %}
+        <div class="tl {% if a.due_date < today %}over{% endif %}">
+          <div class="d">{{ a.due_date.strftime('%b %d') }}</div>
+          <div>
+            <div class="t">{{ a.description|truncate(66) }}{% if a.due_date < today %} <span style="color:#ef4444;font-size:10px;font-weight:700">· OVERDUE</span>{% endif %}</div>
+            <div class="w">{% if a.email %}{{ a.email.sender_name or a.email.sender_email }} · {% endif %}{{ a.type or 'task' }}</div>
+          </div>
+        </div>
+      {% else %}
+        <div class="p-3 text-secondary" style="border-top:1px solid var(--border-color)">No upcoming deadlines.</div>
+      {% endfor %}
+    </div>
+
+    <div class="cc-card">
+      <h6>🗂️ By type</h6>
+      <div class="bars">
+      {% for t, n in topic_stats %}
+        {% set col = topic_colors.get(t, '#6b7280') %}
+        <div class="bar">
+          <span class="lab"><span class="sw" style="background:{{ col }}"></span>{{ t }}</span>
+          <div class="track"><div class="fill" style="width:{{ (n / topic_max * 100)|int }}%;background:{{ col }}"></div></div>
+          <span class="n">{{ n }}</span>
+        </div>
+      {% endfor %}
+      </div>
+    </div>
+
+    <div class="cc-card">
+      <h6>🏢 By vendor</h6>
+      <div class="bars">
+      {% for t, n in vendor_stats %}
+        {% set col = vendor_colors.get(t, '#6b7280') %}
+        <div class="bar">
+          <span class="lab"><span class="sw" style="background:{{ col }}"></span>{{ t }}</span>
+          <div class="track"><div class="fill" style="width:{{ (n / vendor_max * 100)|int }}%;background:{{ col }}"></div></div>
+          <span class="n">{{ n }}</span>
+        </div>
+      {% endfor %}
+      </div>
+    </div>
+
+    <div class="cc-card">
+      <h6>👤 Top senders</h6>
+      {% for s in top_senders %}
+        <div class="sender">
+          <div><div class="nm">{{ s.name or s.email }}</div><div class="em">{{ s.email }}</div></div>
+          <span class="vol">{{ s.email_count }}</span>
+        </div>
+      {% else %}
+        <div class="p-3 text-secondary" style="border-top:1px solid var(--border-color)">No senders yet.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

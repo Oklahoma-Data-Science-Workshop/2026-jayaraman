@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Tasks{% endblock %}
+{% block extra_css %}
+<style>
+  .grouphd{padding:9px 16px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--text-secondary);background:var(--bg-secondary);border-top:1px solid var(--border-color)}
+  .task{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;
+    padding:12px 16px;border-top:1px solid var(--border-color)}
+  .task:hover{background:var(--bg-secondary)}
+  .chk{appearance:none;-webkit-appearance:none;width:18px;height:18px;border:1.6px solid #3a4a63;
+    border-radius:6px;margin-top:2px;cursor:pointer;position:relative;flex:none;background:var(--bg-secondary)}
+  .chk:checked{background:#10b981;border-color:#10b981}
+  .chk:checked::after{content:"✓";position:absolute;inset:0;color:#fff;font-size:12px;display:grid;place-items:center}
+  .chk:disabled{opacity:.5;cursor:progress}
+  .desc{font-size:13.5px;font-weight:500}
+  .task.done .desc{text-decoration:line-through;color:var(--text-secondary)}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px;color:var(--text-secondary);margin-top:5px}
+  .pri{width:8px;height:8px;border-radius:50%;flex:none}
+  .kind{font-size:10px;color:var(--text-secondary);background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:20px;padding:1px 7px;text-transform:capitalize}
+  .meta .src{color:var(--accent);text-decoration:none}
+  .meta .src:hover{text-decoration:underline}
+  .due{font-size:12px;color:var(--text-secondary);white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right;padding-top:1px}
+  .due.over{color:#ef4444;font-weight:600}
+</style>
+{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center flex-wrap mb-3 gap-2">
+  <h3 class="mb-0">✅ Tasks</h3>
+  <span class="ms-2 text-secondary">{{ counts.open }} open · {{ counts.high }} high priority</span>
+  <a class="ms-auto btn btn-sm btn-outline-secondary"
+     href="{{ url_for('main.tasks', show='open' if show_all else 'all') }}">
+    {{ 'Hide completed' if show_all else 'Show completed' }}
+  </a>
+</div>
+
+{% macro taskrow(a) %}
+  {% set pc = '#ef4444' if a.priority == 'high' else ('#f59e0b' if a.priority == 'medium' else '#6b7280') %}
+  <div class="task {% if a.status == 'completed' %}done{% endif %}">
+    <input type="checkbox" class="chk" aria-label="Mark done"
+           data-url="{{ url_for('main.task_toggle', id=a.id) }}"
+           {% if a.status == 'completed' %}checked{% endif %}>
+    <div>
+      <div class="desc">{{ a.description }}</div>
+      <div class="meta">
+        <span class="pri" style="background:{{ pc }}"></span>
+        {% if a.type %}<span class="kind">{{ a.type }}</span>{% endif %}
+        {% if a.email %}<a class="src" href="{{ url_for('emails.detail', id=a.email.id) }}">{{ (a.email.subject or '(no subject)')|truncate(50) }}</a>
+          <span>· {{ a.email.sender_name or a.email.sender_email }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="due {% if a.due_date and a.due_date < today %}over{% endif %}">
+      {% if a.due_date %}{{ a.due_date.strftime('%b %d') }}{% if a.due_date < today %} · overdue{% endif %}{% else %}—{% endif %}
+    </div>
+  </div>
+{% endmacro %}
+
+<div class="card p-0">
+  {% for key, label in [('high', 'High priority'), ('medium', 'Medium priority'), ('low', 'Low priority')] %}
+    {% if buckets[key] %}
+      <div class="grouphd">{{ label }} · {{ buckets[key]|length }}</div>
+      {% for a in buckets[key] %}{{ taskrow(a) }}{% endfor %}
+    {% endif %}
+  {% endfor %}
+  {% if not buckets['high'] and not buckets['medium'] and not buckets['low'] %}
+    <div class="p-4 text-secondary">No open tasks. 🎉</div>
+  {% endif %}
+  {% if done %}
+    <div class="grouphd">Completed · {{ done|length }}</div>
+    {% for a in done %}{{ taskrow(a) }}{% endfor %}
+  {% endif %}
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  document.querySelectorAll('.chk').forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      var url = cb.dataset.url;
+      cb.disabled = true;
+      fetch(url, { method: 'POST', headers: { 'X-Requested-With': 'fetch' } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          cb.disabled = false;
+          cb.closest('.task').classList.toggle('done', d.completed);
+        })
+        .catch(function () { cb.disabled = false; cb.checked = !cb.checked; });
+    });
+  });
+</script>
+{% endblock %}

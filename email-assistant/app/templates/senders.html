@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Senders{% endblock %}
+{% block extra_css %}
+<style>
+  .sd{display:grid;grid-template-columns:auto 1fr 90px 160px 44px;gap:14px;align-items:center;padding:11px 16px;border-top:1px solid var(--border-color)}
+  .sd:hover{background:var(--bg-secondary)}
+  .sd.head{border-top:0;color:var(--text-secondary);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
+  .sd.head:hover{background:transparent}
+  .star{background:none;border:0;font-size:18px;line-height:1;color:#465873;cursor:pointer;padding:0}
+  .star.on{color:var(--accent)}
+  .sd .nm{font-size:13.5px;font-weight:500}
+  .sd .em{font-size:11.5px;color:var(--text-secondary)}
+  .sd .seen{font-size:12px;color:var(--text-secondary);text-align:right;font-variant-numeric:tabular-nums}
+  .sd .track{height:8px;border-radius:6px;background:var(--bg-secondary);overflow:hidden}
+  .sd .fill{height:100%;border-radius:6px;background:#6366f1}
+  .sd .n{text-align:right;font-variant-numeric:tabular-nums;color:var(--text-secondary)}
+  @media(max-width:767px){.sd{grid-template-columns:auto 1fr 44px}.sd .seen,.sd .track{display:none}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <h3 class="mb-0">👤 Senders</h3>
+  <span class="ms-3 text-secondary">{{ senders|length }} people &amp; lists · tap ☆ to mark a VIP</span>
+</div>
+<div class="card p-0">
+  <div class="sd head">
+    <div></div><div>Sender</div><div style="text-align:right">Last seen</div><div>Volume</div><div style="text-align:right">#</div>
+  </div>
+  {% for s in senders %}
+  <div class="sd">
+    <button class="star {% if s.is_vip %}on{% endif %}" data-url="{{ url_for('main.sender_vip', id=s.id) }}" title="Toggle VIP" aria-label="Toggle VIP">{{ '★' if s.is_vip else '☆' }}</button>
+    <div><div class="nm">{{ s.name or s.email }}</div><div class="em">{{ s.email }}</div></div>
+    <div class="seen">{{ s.last_seen.strftime('%b %d') if s.last_seen else '—' }}</div>
+    <div class="track"><div class="fill" style="width:{{ (s.email_count / max_vol * 100)|int }}%"></div></div>
+    <div class="n">{{ s.email_count }}</div>
+  </div>
+  {% else %}
+    <div class="p-4 text-secondary" style="border-top:1px solid var(--border-color)">No senders yet.</div>
+  {% endfor %}
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  document.querySelectorAll('.star').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var url = b.dataset.url;
+      b.disabled = true;
+      fetch(url, { method: 'POST', headers: { 'X-Requested-With': 'fetch' } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { b.disabled = false; b.classList.toggle('on', d.vip); b.textContent = d.vip ? '★' : '☆'; })
+        .catch(function () { b.disabled = false; });
+    });
+  });
+</script>
+{% endblock %}

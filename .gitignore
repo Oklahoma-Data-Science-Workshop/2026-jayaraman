@@ -1,0 +1,28 @@
+# Secrets — never commit
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Databases & instance data
+instance/
+*.db
+*.sqlite
+*.sqlite3
+*.db.bak*
+
+# Backups & scratch
+*.bak
+*.bak.*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+.claude/
