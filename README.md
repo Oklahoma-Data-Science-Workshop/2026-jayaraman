@@ -6,6 +6,12 @@
 ## Speaker: Muralidharan (Murali) Jayaraman, PhD, MBA. 
 Assistant Director for Shared Resources, Stephenson Cancer Center, University of Oklahoma Health, Oklahoma City OK 73104.
 
+## Speaker's links:
+
+- [Website](https://jmuralie.com/)
+- [His webpage for talk - includes PDF of his slides](https://jmuralie.github.io/automate-academic)
+- [GitHub domain - has his n8n workflow templates](https://github.com/jmuralie/n8n-workflows)
+- [LinkedIn](https://www.linkedin.com/in/mjayaraman/)
 
 
 ## Abstract:
