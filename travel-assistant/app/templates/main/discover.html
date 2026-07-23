@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+{% block title %}Discover Your Destination — Travel Assistant{% endblock %}
+
+{% block extra_style %}
+/* Layout */
+body { display: flex; flex-direction: column; min-height: 100vh; }
+.chat-wrapper { flex: 1; display: flex; flex-direction: column; max-width: 800px; margin: 0 auto; width: 100%; padding: 1rem 1rem 0; }
+.chat-box { flex: 1; overflow-y: auto; padding-bottom: 1rem; }
+
+/* Bubbles */
+.bubble-row { display: flex; margin-bottom: .75rem; }
+.bubble-row.user { justify-content: flex-end; }
+.bubble-row.assistant { justify-content: flex-start; }
+.bubble {
+  max-width: 75%; padding: .6rem 1rem; border-radius: 1.25rem;
+  line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+}
+.bubble-row.user .bubble { background: #198754; color: white; border-bottom-right-radius: .25rem; }
+.bubble-row.assistant .bubble { background: #f1f3f5; color: #212529; border-bottom-left-radius: .25rem; }
+
+/* Typing indicator */
+.typing-indicator { display: none; }
+.typing-indicator.active { display: flex; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #adb5bd; margin: 0 3px; animation: bounce .9s infinite; }
+.dot:nth-child(2) { animation-delay: .15s; }
+.dot:nth-child(3) { animation-delay: .30s; }
+@keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+/* Input bar */
+.input-area { background: white; border-top: 1px solid #dee2e6; padding: .75rem 1rem; }
+#msg-input { resize: none; }
+
+/* Status banner */
+#status-banner { display: none; }
+#status-banner.active { display: block; }
+
+/* Suggestion cards */
+.suggestion-card { opacity: 0; transform: translateY(12px); transition: opacity .45s ease, transform .45s ease; }
+.suggestion-card.visible { opacity: 1; transform: translateY(0); }
+.suggestion-header {
+  background: linear-gradient(135deg, #6610f2 0%, #0dcaf0 100%);
+  color: white;
+}
+.cost-tier { font-size: 1.1rem; letter-spacing: 2px; }
+{% endblock %}
+
+{% block content %}
+<div class="chat-wrapper">
+
+  <div class="chat-box" id="chat-box">
+    {% if not messages %}
+    <div class="bubble-row assistant">
+      <div class="bubble">Hi! I'm your travel concierge. I'll help you find a destination that actually fits <em>you</em> — not just a generic popular spot. <strong>To start: what kinds of experiences do you look for in a trip? (e.g. food, history, adventure, beaches, art, nature...)</strong></div>
+    </div>
+    {% else %}
+      {% for m in messages %}
+      <div class="bubble-row {{ m.role }}">
+        <div class="bubble">{{ m.content }}</div>
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    <div class="bubble-row assistant typing-indicator" id="typing">
+      <div class="bubble d-flex align-items-center" style="background:#f1f3f5;padding:.55rem .9rem">
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="status-banner" class="alert alert-success mb-0 text-center">
+    <i class="bi bi-compass me-2"></i><span id="status-text">Searching the world for your perfect match...</span>
+  </div>
+
+  <div class="input-area" id="input-area">
+    <form id="msg-form" class="d-flex gap-2">
+      <textarea id="msg-input" class="form-control" rows="1" placeholder="Tell me about your travel style..." autofocus></textarea>
+      <button type="submit" class="btn btn-success px-3" id="send-btn">
+        <i class="bi bi-send-fill"></i>
+      </button>
+    </form>
+  </div>
+
+</div>
+
+<!-- Suggestion cards (appear below chat) -->
+<div class="container py-4" id="suggestions-container" style="max-width:900px; display:none;">
+  <hr>
+  <h3 class="mb-1"><i class="bi bi-stars me-2 text-warning"></i>Your Perfect Matches</h3>
+  <p class="text-muted mb-4">Ranked by how well they fit your interests and travel style.</p>
+  <div id="suggestion-cards"></div>
+
+  <div id="footer-actions" style="display:none" class="text-center mt-2">
+    <form action="{{ url_for('main.new_discover') }}" method="post" class="d-inline">
+      <button class="btn btn-outline-success">
+        <i class="bi bi-arrow-counterclockwise me-1"></i>Start Over
+      </button>
+    </form>
+    <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary ms-2">
+      <i class="bi bi-house me-1"></i>Home
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const SESSION_ID  = "{{ session.id }}";
+const MSG_URL     = "{{ url_for('main.discover_message', session_id=session.id) }}";
+const SUGGEST_URL = "{{ url_for('main.discover_suggest', session_id=session.id) }}";
+const CHOOSE_URL  = "{{ url_for('main.discover_choose', session_id=session.id) }}";
+
+const chatBox           = document.getElementById("chat-box");
+const msgForm           = document.getElementById("msg-form");
+const msgInput          = document.getElementById("msg-input");
+const sendBtn           = document.getElementById("send-btn");
+const typing            = document.getElementById("typing");
+const inputArea         = document.getElementById("input-area");
+const statusBanner      = document.getElementById("status-banner");
+const statusText        = document.getElementById("status-text");
+const suggestionsContainer = document.getElementById("suggestions-container");
+const suggestionCards   = document.getElementById("suggestion-cards");
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function addBubble(role, text) {
+  const row = document.createElement("div");
+  row.className = `bubble-row ${role}`;
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.textContent = text;
+  row.appendChild(bubble);
+  chatBox.insertBefore(row, typing);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function showTyping(show) {
+  typing.classList.toggle("active", show);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function setStatus(msg) {
+  statusText.textContent = msg;
+  statusBanner.classList.add("active");
+  inputArea.style.display = "none";
+}
+
+// ── Suggestion card renderer ──────────────────────────────────────────────────
+
+function renderSuggestion(data) {
+  suggestionsContainer.style.display = "block";
+
+  const costTier   = data.cost_tier || "$$$";
+  const flightHrs  = data.approx_flight_hours ? `~${data.approx_flight_hours}h` : "";
+  const highlights = (data.highlights || [])
+    .map(h => `<span class="badge bg-light text-dark border me-1 mb-1 fw-normal">${h}</span>`)
+    .join("");
+
+  const card = document.createElement("div");
+  card.className = "suggestion-card card mb-4 shadow";
+
+  card.innerHTML = `
+    <div class="card-header suggestion-header py-3">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <h5 class="mb-1 fw-bold">${data.destination || ""}</h5>
+          <p class="mb-0 fst-italic" style="opacity:.85;font-size:.95rem">${data.tagline || ""}</p>
+        </div>
+        <div class="text-end ms-3 flex-shrink-0">
+          <div class="cost-tier fw-bold">${costTier}</div>
+          ${flightHrs ? `<small><i class="bi bi-airplane me-1"></i>${flightHrs}</small>` : ""}
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <p class="mb-2">
+        <i class="bi bi-person-heart text-primary me-2"></i>
+        <strong>Why you'll love it:</strong> ${data.why_you || ""}
+      </p>
+      <div class="mb-3">${highlights}</div>
+      <div class="d-flex flex-wrap gap-3 text-muted small mb-3">
+        ${data.best_time_match ? `<span><i class="bi bi-calendar3 me-1"></i>${data.best_time_match}</span>` : ""}
+        ${data.visa_note ? `<span><i class="bi bi-passport me-1"></i>${data.visa_note}</span>` : ""}
+      </div>
+      ${data.surprise_factor
+        ? `<div class="alert alert-light border mb-3 py-2 small"><i class="bi bi-stars text-warning me-2"></i><strong>Surprise angle:</strong> ${data.surprise_factor}</div>`
+        : ""}
+      <button class="btn btn-primary plan-btn">
+        <i class="bi bi-map-fill me-2"></i>Plan this trip
+      </button>
+    </div>
+  `;
+
+  card.querySelector(".plan-btn").addEventListener("click", function () {
+    chooseDestination(data.destination, this);
+  });
+
+  suggestionCards.appendChild(card);
+  requestAnimationFrame(() => requestAnimationFrame(() => card.classList.add("visible")));
+
+  if (suggestionCards.children.length === 1) {
+    suggestionsContainer.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+// ── Choose destination → redirect to planning chat ────────────────────────────
+
+async function chooseDestination(destination, btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Setting up your trip...';
+
+  try {
+    const resp = await fetch(CHOOSE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ destination }),
+    });
+    const data = await resp.json();
+    if (data.redirect) {
+      window.location.href = data.redirect;
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-map-fill me-2"></i>Plan this trip';
+    }
+  } catch {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-map-fill me-2"></i>Plan this trip';
+  }
+}
+
+// ── Send message ──────────────────────────────────────────────────────────────
+
+msgForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = msgInput.value.trim();
+  if (!text) return;
+
+  addBubble("user", text);
+  msgInput.value = "";
+  sendBtn.disabled = true;
+  msgInput.disabled = true;
+  showTyping(true);
+
+  try {
+    const resp = await fetch(MSG_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text }),
+    });
+    const data = await resp.json();
+
+    showTyping(false);
+    sendBtn.disabled = false;
+    msgInput.disabled = false;
+
+    if (data.error) {
+      addBubble("assistant", "Sorry, something went wrong: " + data.error);
+      return;
+    }
+
+    addBubble("assistant", data.reply);
+
+    if (data.interests_ready) {
+      startSuggestions();
+    } else {
+      msgInput.focus();
+    }
+  } catch {
+    showTyping(false);
+    sendBtn.disabled = false;
+    msgInput.disabled = false;
+    addBubble("assistant", "Network error. Please try again.");
+  }
+});
+
+msgInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    msgForm.dispatchEvent(new Event("submit"));
+  }
+});
+
+// ── Suggestion streaming via SSE ──────────────────────────────────────────────
+
+function startSuggestions() {
+  setStatus("Searching the world for your perfect match...");
+  const es = new EventSource(SUGGEST_URL);
+
+  es.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+
+    if (msg.type === "status") {
+      statusText.textContent = msg.message;
+    } else if (msg.type === "suggestion") {
+      renderSuggestion(msg.data);
+    } else if (msg.type === "done") {
+      es.close();
+      statusBanner.classList.remove("active");
+      document.getElementById("footer-actions").style.display = "block";
+    } else if (msg.type === "error") {
+      es.close();
+      statusBanner.innerHTML = `<i class="bi bi-exclamation-triangle me-2"></i>${msg.message}`;
+      statusBanner.classList.replace("alert-success", "alert-danger");
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    statusText.textContent = "Connection lost. Please refresh.";
+  };
+}
+
+// Auto-start if page reloads during suggesting state
+{% if session.status == 'suggesting' %}
+startSuggestions();
+{% endif %}
+
+chatBox.scrollTop = chatBox.scrollHeight;
+</script>
+{% endblock %}

@@ -1,0 +1,171 @@
+{
+  "name": "Email Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": 10,
+        "filters": {
+          "q": "in:inbox is:unread subject:[EXTERNAL] OR from:(*@*.com -@yourdomain.edu)"
+        },
+        "returnAll": false,
+        "simple": false
+      },
+      "id": "fetch-gmail",
+      "name": "Fetch External Emails",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "YOUR Gmail OAuth2 credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2048, messages: [{ role: 'user', content: `Analyze this email and return JSON:\\n{\\\"topic\\\": \\\"Vendor|Collaborator|Administration|IT|HR|Committee|Student|Finance|Other\\\", \\\"urgency\\\": \\\"critical|important|normal|low\\\", \\\"sentiment\\\": \\\"positive|negative|neutral|urgent\\\", \\\"email_type\\\": \\\"request|fyi|decision|meeting|deadline|reply\\\", \\\"status\\\": \\\"needs_action|inbox|reference\\\", \\\"summary\\\": \\\"2-3 sentence summary\\\", \\\"key_points\\\": [\\\"point1\\\", \\\"point2\\\"], \\\"action_items\\\": [{\\\"type\\\": \\\"meeting|deadline|task|request|decision\\\", \\\"description\\\": \\\"...\\\", \\\"due_date\\\": \\\"YYYY-MM-DD or null\\\", \\\"priority\\\": \\\"high|medium|low\\\"}], \\\"is_vip\\\": false, \\\"requires_response\\\": false}\\n\\nEmail:\\nFrom: ${$json.from && $json.from.text ? $json.from.text : ($json.from || '')}\\nSubject: ${$json.subject || ''}\\nBody: ${($json.text || $json.snippet || '').slice(0, 3000)}` }] }) }}"
+      },
+      "id": "classify-with-claude",
+      "name": "Classify with Claude",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "name": "YOUR Anthropic API credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputItems = $input.all();\nconst emails = $(\"Fetch External Emails\").all();\nconst results = [];\n\nfor (let i = 0; i < inputItems.length; i++) {\n  const email = emails[i] ? emails[i].json : {};\n\n  let classification = {};\n  try {\n    const claudeText = inputItems[i].json.content[0].text;\n    const jsonMatch = claudeText.match(/{[\\s\\S]*}/);\n    if (jsonMatch) {\n      classification = JSON.parse(jsonMatch[0]);\n    }\n  } catch (e) {\n    console.log(\"Failed to parse Claude response for item \" + i + \": \" + e.message);\n  }\n\n  classification = Object.assign({\n    topic: \"Other\",\n    urgency: \"normal\",\n    status: \"inbox\",\n    summary: email.subject || \"\",\n    key_points: [],\n    action_items: [],\n    requires_response: false,\n    is_vip: false\n  }, classification);\n\n  let receivedAt;\n  try {\n    const d = email.date ? new Date(email.date) : new Date();\n    receivedAt = isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();\n  } catch (e) {\n    receivedAt = new Date().toISOString();\n  }\n\n  let senderEmail = \"\";\n  let senderName = \"\";\n  if (email.from && typeof email.from === \"object\") {\n    if (Array.isArray(email.from.value) && email.from.value.length) {\n      senderEmail = email.from.value[0].address || \"\";\n      senderName = email.from.value[0].name || \"\";\n    } else if (email.from.text) {\n      senderEmail = email.from.text;\n    }\n  } else if (typeof email.from === \"string\") {\n    senderEmail = email.from;\n  }\n\n  let recipient = \"\";\n  if (email.to && typeof email.to === \"object\") {\n    recipient = email.to.text || \"\";\n  } else if (typeof email.to === \"string\") {\n    recipient = email.to;\n  }\n\n  results.push({\n    json: {\n      gmail_id: email.id,\n      thread_id: email.threadId,\n      sender: { email: senderEmail, name: senderName },\n      recipient: recipient,\n      subject: email.subject || \"\",\n      body_text: email.text || \"\",\n      snippet: email.snippet || \"\",\n      received_at: receivedAt,\n      attachments: [],\n      classification: classification\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "format-payload",
+      "name": "Format Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://YOUR_FLASK_HOST:7008/api/emails/ingest",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "options": {},
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json) }}"
+      },
+      "id": "send-to-api",
+      "name": "Send to Email Assistant API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch External Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch External Emails": {
+      "main": [
+        [
+          {
+            "node": "Classify with Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify with Claude": {
+      "main": [
+        [
+          {
+            "node": "Format Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Payload": {
+      "main": [
+        [
+          {
+            "node": "Send to Email Assistant API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}

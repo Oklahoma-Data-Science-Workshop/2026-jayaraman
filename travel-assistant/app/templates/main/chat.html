@@ -1,0 +1,752 @@
+{% extends "base.html" %}
+{% block title %}{{ session.title or 'New Trip' }} — Travel Assistant{% endblock %}
+
+{% block extra_style %}
+/* ── Layout ── */
+body { display: flex; flex-direction: column; min-height: 100vh; }
+.chat-wrapper { flex: 1; display: flex; flex-direction: column; max-width: 800px; margin: 0 auto; width: 100%; padding: 1rem 1rem 0; }
+.chat-box { flex: 1; overflow-y: auto; padding-bottom: 1rem; }
+
+/* ── Bubbles ── */
+.bubble-row { display: flex; margin-bottom: .75rem; }
+.bubble-row.user { justify-content: flex-end; }
+.bubble-row.assistant { justify-content: flex-start; }
+.bubble {
+  max-width: 75%;
+  padding: .6rem 1rem;
+  border-radius: 1.25rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bubble-row.user .bubble { background: #0d6efd; color: white; border-bottom-right-radius: .25rem; }
+.bubble-row.assistant .bubble { background: #f1f3f5; color: #212529; border-bottom-left-radius: .25rem; }
+
+/* ── Typing indicator ── */
+.typing-indicator { display: none; }
+.typing-indicator.active { display: flex; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #adb5bd; margin: 0 3px; animation: bounce .9s infinite; }
+.dot:nth-child(2) { animation-delay: .15s; }
+.dot:nth-child(3) { animation-delay: .30s; }
+@keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+/* ── Input bar ── */
+.input-area { background: white; border-top: 1px solid #dee2e6; padding: .75rem 1rem; }
+#msg-input { resize: none; }
+
+/* ── Status banner ── */
+#status-banner { display: none; }
+#status-banner.active { display: block; }
+
+/* ── Plan sections ── */
+.plan-section { opacity: 0; transform: translateY(10px); transition: opacity .4s ease, transform .4s ease; }
+.plan-section.visible { opacity: 1; transform: translateY(0); }
+.flight-recommended { background: #d1ecf1; }
+.flight-recommended td:first-child::before {
+  content: "★ ";
+  color: #0dcaf0;
+  font-weight: bold;
+}
+.price { font-weight: 700; color: #198754; }
+.comfort-no { color: #dc3545; font-size: .8rem; }
+.bg-purple { background-color: #6610f2 !important; }
+{% endblock %}
+
+{% block content %}
+<div class="chat-wrapper">
+
+  <!-- Chat box -->
+  <div class="chat-box" id="chat-box">
+
+    <!-- Seed greeting if no messages yet -->
+    {% if not messages %}
+    <div class="bubble-row assistant">
+      <div class="bubble">Hi! I'm your travel assistant. <strong>Where are you traveling from?</strong></div>
+    </div>
+    {% else %}
+      {% for m in messages %}
+      <div class="bubble-row {{ m.role }}">
+        <div class="bubble">{{ m.content }}</div>
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    <!-- Typing indicator -->
+    <div class="bubble-row assistant typing-indicator" id="typing">
+      <div class="bubble d-flex align-items-center" style="background:#f1f3f5;padding:.55rem .9rem">
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      </div>
+    </div>
+  </div><!-- /chat-box -->
+
+  <!-- Status banner (replaces input while generating) -->
+  <div id="status-banner" class="alert alert-info mb-0 text-center">
+    <i class="bi bi-hourglass-split me-2"></i><span id="status-text">Searching for flights...</span>
+  </div>
+
+  <!-- Input area -->
+  <div class="input-area" id="input-area">
+    <form id="msg-form" class="d-flex gap-2">
+      <textarea id="msg-input" class="form-control" rows="1" placeholder="Type your message..." autofocus></textarea>
+      <button type="submit" class="btn btn-primary px-3" id="send-btn">
+        <i class="bi bi-send-fill"></i>
+      </button>
+    </form>
+  </div>
+
+</div><!-- /chat-wrapper -->
+
+<!-- Plan results (below chat) -->
+<div class="container py-4" id="plan-container" style="max-width:900px; display:none;">
+  <hr>
+  <h3 class="mb-4"><i class="bi bi-map me-2"></i>Your Travel Plan</h3>
+
+  <!-- Route section -->
+  <div class="plan-section card mb-4 shadow-sm" id="sec-route" style="display:none!important">
+    <div class="card-header bg-primary text-white">
+      <i class="bi bi-signpost-split me-2"></i>Optimal Route
+    </div>
+    <div class="card-body" id="route-body"></div>
+  </div>
+
+  <!-- Destinations section -->
+  <div class="plan-section card mb-4 shadow-sm" id="sec-destinations" style="display:none!important">
+    <div class="card-header bg-purple text-white">
+      <i class="bi bi-geo-alt-fill me-2"></i>Destination Guide
+    </div>
+    <div class="card-body" id="destinations-body"></div>
+  </div>
+
+  <!-- Flights section -->
+  <div class="plan-section card mb-4 shadow-sm" id="sec-flights" style="display:none!important">
+    <div class="card-header bg-info text-white">
+      <i class="bi bi-airplane me-2"></i>Flights
+    </div>
+    <div class="card-body" id="flights-body"></div>
+  </div>
+
+  <!-- Itinerary section -->
+  <div class="plan-section card mb-4 shadow-sm" id="sec-itinerary" style="display:none!important">
+    <div class="card-header bg-success text-white">
+      <i class="bi bi-calendar3 me-2"></i>Day-by-Day Itinerary
+    </div>
+    <div class="card-body" id="itinerary-body"></div>
+  </div>
+
+  <!-- Budget section -->
+  <div class="plan-section card mb-4 shadow-sm" id="sec-budget" style="display:none!important">
+    <div class="card-header bg-warning text-dark">
+      <i class="bi bi-wallet2 me-2"></i>Budget Breakdown
+    </div>
+    <div class="card-body" id="budget-body"></div>
+  </div>
+
+  <!-- Connections section -->
+  <div class="plan-section card mb-4 shadow-sm" id="sec-connections" style="display:none!important">
+    <div class="card-header text-white" style="background-color:#fd7e14">
+      <i class="bi bi-train-front-fill me-2"></i>Ground Connections &amp; Local Apps
+    </div>
+    <div class="card-body" id="connections-body"></div>
+  </div>
+
+  <!-- Local Transport section -->
+  <div class="plan-section card mb-4 shadow-sm" id="sec-transport" style="display:none!important">
+    <div class="card-header text-white" style="background-color:#4f46e5">
+      <i class="bi bi-signpost me-2"></i>Getting Around — Local Transport &amp; Apps
+    </div>
+    <div class="card-body" id="transport-body"></div>
+  </div>
+
+  <!-- Hotels section -->
+  <div class="plan-section card mb-4 shadow-sm" id="sec-hotels" style="display:none!important">
+    <div class="card-header text-white" style="background-color:#0d9488">
+      <i class="bi bi-building me-2"></i>Hotels (4★ &amp; Above)
+    </div>
+    <div class="card-body" id="hotels-body"></div>
+  </div>
+
+  <!-- Action bar (shown when plan is done) -->
+  <div class="text-center mt-3" id="new-trip-btn" style="display:none">
+    <a href="{{ url_for('main.trip_view', session_id=session.id) }}"
+       target="_blank" class="btn btn-success btn-lg">
+      <i class="bi bi-share me-2"></i>Share Itinerary
+    </a>
+    <form action="{{ url_for('main.new_trip') }}" method="post" class="d-inline ms-2">
+      <button class="btn btn-primary btn-lg">
+        <i class="bi bi-plus-circle me-2"></i>New Trip
+      </button>
+    </form>
+    <a href="{{ url_for('main.trips') }}" class="btn btn-outline-secondary btn-lg ms-2">
+      <i class="bi bi-clock-history me-1"></i>Past Trips
+    </a>
+  </div>
+
+</div><!-- /plan-container -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const SESSION_ID = "{{ session.id }}";
+const MSG_URL   = "{{ url_for('main.send_message', session_id=session.id) }}";
+const GEN_URL   = "{{ url_for('main.generate_plan', session_id=session.id) }}";
+const chatBox = document.getElementById("chat-box");
+const msgForm = document.getElementById("msg-form");
+const msgInput = document.getElementById("msg-input");
+const sendBtn = document.getElementById("send-btn");
+const typing = document.getElementById("typing");
+const inputArea = document.getElementById("input-area");
+const statusBanner = document.getElementById("status-banner");
+const statusText = document.getElementById("status-text");
+const planContainer = document.getElementById("plan-container");
+
+// ── Helpers ──────────────────────────────────────────────
+
+function addBubble(role, text) {
+  const row = document.createElement("div");
+  row.className = `bubble-row ${role}`;
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.textContent = text;
+  row.appendChild(bubble);
+  chatBox.insertBefore(row, typing);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function showTyping(show) {
+  typing.classList.toggle("active", show);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function setStatus(msg) {
+  statusText.textContent = msg;
+  statusBanner.classList.add("active");
+  inputArea.style.display = "none";
+}
+
+function showSection(id) {
+  const el = document.getElementById(id);
+  el.style.removeProperty("display");
+  planContainer.style.display = "block";
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => el.classList.add("visible"));
+  });
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// ── Section renderers ─────────────────────────────────────
+
+function renderRoute(data) {
+  const body = document.getElementById("route-body");
+  const order = (data.optimal_order || []).join(" → ");
+  body.innerHTML = `
+    <p class="fs-5 fw-semibold mb-2">${order}</p>
+    <p class="text-muted mb-0">${data.reasoning || ""}</p>
+  `;
+  showSection("sec-route");
+}
+
+function renderFlights(data) {
+  const body = document.getElementById("flights-body");
+  let html = "";
+
+  for (const leg of (data.legs || [])) {
+    const timePref = leg.time_pref ? `<div class="text-muted small mb-2"><i class="bi bi-clock me-1"></i>${leg.time_pref}</div>` : "";
+    html += `<h6 class="mt-3 mb-1">${leg.from} → ${leg.to} <span class="text-muted fw-normal">(${leg.date})</span></h6>${timePref}`;
+
+    // Build a table with recommended + alternatives
+    html += `<div class="table-responsive"><table class="table table-bordered table-sm align-middle">
+      <thead class="table-light"><tr>
+        <th>Flight</th><th>Departs</th><th>Arrives</th><th>Stops</th><th>Price</th><th>Notes</th>
+      </tr></thead><tbody>`;
+
+    const rec = leg.recommended || {};
+    const stopLabel = rec.stops === 0 ? "Nonstop" : `${rec.stops} stop${rec.stops > 1 ? "s" : ""}`;
+    html += `<tr class="flight-recommended">
+      <td><strong>${rec.airline || ""}</strong><br><small class="text-muted">${rec.flight || ""}</small></td>
+      <td>${rec.departs || ""}</td>
+      <td>${rec.arrives || ""}</td>
+      <td>${stopLabel}</td>
+      <td class="price">$${rec.price_usd || ""}</td>
+      <td><small>${rec.why || ""}</small></td>
+    </tr>`;
+
+    for (const alt of (leg.alternatives || [])) {
+      const altStops = alt.stops === 0 ? "Nonstop" : `${alt.stops} stop${alt.stops > 1 ? "s" : ""}`;
+      const comfortWarn = alt.comfort_match === false
+        ? `<span class="comfort-no"><i class="bi bi-exclamation-circle me-1"></i>${alt.note || "Time preference mismatch"}</span>` : "";
+      html += `<tr>
+        <td>${alt.airline || ""}</td>
+        <td>${alt.departs || ""}</td>
+        <td>${alt.arrives || ""}</td>
+        <td>${altStops}</td>
+        <td class="price">$${alt.price_usd || ""}</td>
+        <td>${comfortWarn}</td>
+      </tr>`;
+    }
+
+    html += `</tbody></table></div>`;
+  }
+
+  body.innerHTML = html || "<p class='text-muted'>No flight data available.</p>";
+  showSection("sec-flights");
+}
+
+function renderItinerary(data) {
+  const body = document.getElementById("itinerary-body");
+  const days = data.days || [];
+
+  const accordionId = "itinerary-acc";
+  let html = `<div class="accordion" id="${accordionId}">`;
+
+  days.forEach((d, i) => {
+    const collapseId = `day-${i}`;
+    const show = i === 0 ? "show" : "";
+    const acts = (d.activities || []).map(a => `<li>${a}</li>`).join("");
+    html += `
+      <div class="accordion-item">
+        <h2 class="accordion-header">
+          <button class="accordion-button ${show ? "" : "collapsed"}" type="button"
+            data-bs-toggle="collapse" data-bs-target="#${collapseId}">
+            <strong class="me-2">Day ${d.day}</strong> — ${d.city}
+            <span class="text-muted ms-2 fw-normal">${d.date || ""}</span>
+          </button>
+        </h2>
+        <div id="${collapseId}" class="accordion-collapse collapse ${show}" data-bs-parent="#${accordionId}">
+          <div class="accordion-body">
+            <ul class="mb-0">${acts}</ul>
+          </div>
+        </div>
+      </div>`;
+  });
+
+  html += "</div>";
+  body.innerHTML = html;
+  showSection("sec-itinerary");
+}
+
+function renderConnections(data) {
+  const body = document.getElementById("connections-body");
+  const pairs = data.city_pairs || [];
+  const countryApps = data.country_apps || [];
+  const categoryColors = {
+    "Trains": "danger", "Metro/Bus": "primary", "Navigation": "success",
+    "Ride-share": "warning", "Transit card": "info", "Intercity bus": "secondary"
+  };
+  const transportIcon = { train: "bi-train-front", bus: "bi-bus-front", ferry: "bi-water", car: "bi-car-front" };
+
+  let html = "";
+
+  if (pairs.length) {
+    html += `<h6 class="mb-3"><i class="bi bi-train-front-fill text-warning me-2"></i>Train &amp; Transit Connections</h6>`;
+    for (const p of pairs) {
+      const icon = transportIcon[p.recommended_transport] || "bi-train-front";
+      const tips = (p.tips || []).map(t => `<li>${t}</li>`).join("");
+      const alts = (p.alternatives || []).map(a =>
+        `<span class="badge bg-light text-dark border me-1">${a.type}: ${a.operator} · ${a.duration} · ${a.price_range}${a.note ? " — " + a.note : ""}</span>`
+      ).join("");
+
+      html += `
+        <div class="border rounded p-3 mb-3">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+            <div>
+              <span class="fw-bold">${p.from} → ${p.to}</span>
+              <span class="badge bg-warning text-dark ms-2">
+                <i class="bi ${icon} me-1"></i>${p.recommended_transport || "train"}
+              </span>
+            </div>
+            <span class="text-success fw-bold">${p.price_range || ""}</span>
+          </div>
+          <div class="text-muted small mb-2">
+            ${p.service_name ? `<strong>${p.service_name}</strong> · ` : ""}${p.operator || ""}
+            ${p.duration ? ` · ${p.duration}` : ""}${p.frequency ? ` · ${p.frequency}` : ""}
+          </div>
+          ${p.booking_platform ? `<div class="mb-2 small"><i class="bi bi-ticket-perforated me-1 text-primary"></i>Book on: <strong>${p.booking_platform}</strong>${p.book_ahead ? " · " + p.book_ahead : ""}</div>` : ""}
+          ${tips ? `<ul class="mb-2 small">${tips}</ul>` : ""}
+          ${alts ? `<div class="small"><span class="text-muted me-1">Alternatives:</span>${alts}</div>` : ""}
+        </div>`;
+    }
+  }
+
+  if (countryApps.length) {
+    html += `<h6 class="mt-4 mb-3"><i class="bi bi-phone-fill text-info me-2"></i>Essential Apps to Download</h6>`;
+    html += `<div class="row g-3">`;
+    for (const c of countryApps) {
+      const appRows = (c.apps || []).map(app => {
+        const color = categoryColors[app.category] || "secondary";
+        return `<div class="d-flex align-items-start mb-2">
+          <span class="badge bg-${color} me-2 flex-shrink-0" style="font-size:.7rem;margin-top:2px">${app.category}</span>
+          <div>
+            <strong>${app.name}</strong>
+            <div class="text-muted" style="font-size:.82rem">${app.why}</div>
+            ${app.platforms ? `<div class="text-muted" style="font-size:.75rem">${app.platforms}</div>` : ""}
+          </div>
+        </div>`;
+      }).join("");
+      html += `
+        <div class="col-md-6">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body p-3">
+              <h6 class="mb-3">${c.flag || ""} ${c.country}</h6>
+              ${appRows}
+            </div>
+          </div>
+        </div>`;
+    }
+    html += `</div>`;
+  }
+
+  body.innerHTML = html || "<p class='text-muted'>No ground connections applicable for this itinerary.</p>";
+  showSection("sec-connections");
+}
+
+function renderBudget(data) {
+  const body = document.getElementById("budget-body");
+  const rows = (data.breakdown || []).map(r =>
+    `<tr><td>${r.category}</td><td class="text-end price">${r.amount}</td></tr>`
+  ).join("");
+
+  const tips = (data.tips || []).map(t =>
+    `<div class="alert alert-light border mb-2 py-2"><i class="bi bi-lightbulb me-2 text-warning"></i>${t}</div>`
+  ).join("");
+
+  body.innerHTML = `
+    <div class="table-responsive mb-3">
+      <table class="table table-bordered">
+        <thead class="table-light"><tr><th>Category</th><th class="text-end">Amount</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr class="table-dark">
+          <td><strong>Total Estimate</strong></td>
+          <td class="text-end"><strong>${data.total_range || ""}</strong></td>
+        </tr></tfoot>
+      </table>
+    </div>
+    ${tips}
+  `;
+  showSection("sec-budget");
+}
+
+function renderDestinations(data) {
+  const body = document.getElementById("destinations-body");
+  const cities = data.cities || [];
+  if (!cities.length) return;
+
+  const tabNav = cities.map((c, i) =>
+    `<li class="nav-item"><a class="nav-link ${i===0?'active':''}" data-bs-toggle="tab" href="#dest-${i}">${c.city}</a></li>`
+  ).join("");
+
+  const tabContent = cities.map((c, i) => `
+    <div class="tab-pane fade ${i===0?'show active':''}" id="dest-${i}">
+      <p class="text-muted fst-italic mb-3">${c.tagline || ""}</p>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <h6><i class="bi bi-star-fill text-warning me-1"></i>Must Do</h6>
+          <ul>${(c.must_do||[]).map(x=>`<li>${x}</li>`).join("")}</ul>
+          <h6><i class="bi bi-gem text-info me-1"></i>Hidden Gems</h6>
+          <ul>${(c.hidden_gems||[]).map(x=>`<li>${x}</li>`).join("")}</ul>
+          ${c.skip?.length ? `<h6><i class="bi bi-x-circle text-danger me-1"></i>Skip</h6><ul>${c.skip.map(x=>`<li>${x}</li>`).join("")}</ul>` : ""}
+        </div>
+        <div class="col-md-6">
+          <h6><i class="bi bi-egg-fried text-success me-1"></i>Food</h6>
+          <p><strong>Try:</strong> ${(c.food?.signature_dishes||[]).join(", ")}<br>
+          <strong>Best area:</strong> ${c.food?.best_neighborhood_to_eat||""}</p>
+          <h6><i class="bi bi-info-circle me-1"></i>Practical</h6>
+          <ul>
+            ${c.practical?.transport ? `<li>${c.practical.transport}</li>` : ""}
+            ${c.practical?.language_tip ? `<li>${c.practical.language_tip}</li>` : ""}
+            ${c.practical?.best_time_of_day ? `<li>${c.practical.best_time_of_day}</li>` : ""}
+          </ul>
+          ${c.day_trips?.length ? `<h6><i class="bi bi-train-front me-1"></i>Day Trips</h6><ul>${c.day_trips.map(t=>`<li><strong>${t.destination}</strong> — ${t.why}</li>`).join("")}</ul>` : ""}
+          ${c.seasonal_note ? `<div class="alert alert-light border py-2"><i class="bi bi-calendar-event me-2 text-primary"></i>${c.seasonal_note}</div>` : ""}
+        </div>
+      </div>
+    </div>`
+  ).join("");
+
+  body.innerHTML = `
+    <ul class="nav nav-tabs mb-3">${tabNav}</ul>
+    <div class="tab-content">${tabContent}</div>
+  `;
+  showSection("sec-destinations");
+}
+
+function renderTransport(data) {
+  const body = document.getElementById("transport-body");
+  const cities = data.cities || [];
+  if (!cities.length) {
+    body.innerHTML = "<p class='text-muted'>No transport data available.</p>";
+    showSection("sec-transport");
+    return;
+  }
+
+  const transferIcon = { train: "bi-train-front", bus: "bi-bus-front", taxi: "bi-taxi-front", rideshare: "bi-car-front", metro: "bi-lightning-charge", ferry: "bi-water" };
+  const appCatColor = { "Navigation": "primary", "Transit card": "info", "Taxi/Ride-share": "warning", "Metro/Bus": "success", "Trains": "danger", "Offline maps": "secondary" };
+
+  const tabNav = cities.map((c, i) =>
+    `<li class="nav-item"><a class="nav-link ${i===0?'active':''}" data-bs-toggle="tab" href="#tr-city-${i}">${c.city}</a></li>`
+  ).join("");
+
+  const tabContent = cities.map((c, i) => {
+    // Airport transfer
+    const transfers = (c.airport_transfer || []).map(t => {
+      const icon = transferIcon[t.type] || "bi-geo-alt";
+      return `
+        <div class="d-flex align-items-start gap-3 mb-2 border-bottom pb-2">
+          <div class="text-white rounded-2 d-flex align-items-center justify-content-center flex-shrink-0"
+               style="width:36px;height:36px;background:#4f46e5">
+            <i class="bi ${icon}"></i>
+          </div>
+          <div class="flex-grow-1">
+            <strong>${t.name}</strong>
+            <span class="badge bg-light text-dark border ms-1" style="font-size:.72rem">${t.duration}</span>
+            <span class="text-success fw-bold ms-1">${t.price}</span>
+            ${t.frequency ? `<div class="text-muted small">${t.frequency}</div>` : ""}
+            ${t.tip ? `<div class="small fst-italic text-muted">${t.tip}</div>` : ""}
+          </div>
+        </div>`;
+    }).join("");
+
+    // Transit cards
+    const cards = (c.transit_cards || []).map(tc => {
+      const badge = tc.must_have
+        ? `<span class="badge bg-danger ms-1" style="font-size:.7rem">Must Have</span>`
+        : `<span class="badge bg-secondary ms-1" style="font-size:.7rem">Optional</span>`;
+      return `
+        <div class="border rounded p-2 mb-2 ${tc.must_have ? 'border-danger' : ''}">
+          <div class="fw-bold">${tc.name} ${badge}</div>
+          <div class="text-muted small">${tc.works_for}</div>
+          <div class="small"><i class="bi bi-geo-alt me-1 text-muted"></i>${tc.where_to_get}</div>
+          ${tc.cost ? `<div class="small text-success">${tc.cost}</div>` : ""}
+        </div>`;
+    }).join("");
+
+    // Apps
+    const apps = (c.apps || []).map(app => {
+      const color = appCatColor[app.category] || "secondary";
+      const pre = app.download_before_landing
+        ? `<span class="badge bg-warning text-dark ms-1" style="font-size:.68rem">Download before landing</span>` : "";
+      return `
+        <div class="d-flex align-items-start mb-2">
+          <span class="badge bg-${color} me-2 flex-shrink-0" style="font-size:.7rem;margin-top:2px">${app.category}</span>
+          <div>
+            <strong>${app.name}</strong>${pre}
+            <div class="text-muted" style="font-size:.82rem">${app.why}</div>
+          </div>
+        </div>`;
+    }).join("");
+
+    // Practical tips
+    const tips = (c.practical_tips || []).map(t => `<li>${t}</li>`).join("");
+
+    // Ride-share
+    const rs = c.ride_share;
+    const rideShare = rs ? `
+      <div class="border rounded p-2 mb-3">
+        <div class="fw-semibold mb-1"><i class="bi bi-car-front me-1 text-warning"></i>Taxi &amp; Ride-share</div>
+        ${rs.main_apps?.length ? `<div class="small mb-1">Apps: ${rs.main_apps.map(a=>`<span class="badge bg-light text-dark border me-1">${a}</span>`).join("")}</div>` : ""}
+        ${rs.avg_fare_local ? `<div class="small text-success mb-1">Typical fare: ${rs.avg_fare_local}</div>` : ""}
+        ${rs.tip ? `<div class="small fst-italic text-muted">${rs.tip}</div>` : ""}
+      </div>` : "";
+
+    return `
+      <div class="tab-pane fade ${i===0?'show active':''}" id="tr-city-${i}">
+        ${transfers ? `<h6 class="mb-2"><i class="bi bi-airplane-engines me-1 text-indigo"></i>Airport → City Center</h6>${transfers}` : ""}
+
+        ${c.local_transit ? `
+        <div class="border rounded p-2 mb-3">
+          <div class="fw-semibold mb-1"><i class="bi bi-lightning-charge me-1 text-primary"></i>Local Transit — ${c.local_transit.system || ""}</div>
+          ${c.local_transit.coverage ? `<div class="small text-muted mb-1">${c.local_transit.coverage}</div>` : ""}
+          ${c.local_transit.day_pass ? `<div class="small mb-1"><strong>Day pass:</strong> ${c.local_transit.day_pass}</div>` : ""}
+          ${c.local_transit.operating_hours ? `<div class="small mb-1"><i class="bi bi-clock me-1 text-muted"></i>${c.local_transit.operating_hours}</div>` : ""}
+          ${c.local_transit.tip ? `<div class="small fst-italic text-muted">${c.local_transit.tip}</div>` : ""}
+        </div>` : ""}
+
+        ${cards ? `<h6 class="mb-2"><i class="bi bi-credit-card me-1 text-danger"></i>Transit Cards to Get</h6>${cards}` : ""}
+        ${rideShare}
+
+        ${apps ? `<h6 class="mb-2 mt-3"><i class="bi bi-phone-fill me-1" style="color:#4f46e5"></i>Apps to Download</h6>${apps}` : ""}
+
+        ${c.cycling ? `<div class="alert alert-light border py-2 mt-2 mb-2"><i class="bi bi-bicycle me-2 text-success"></i>${c.cycling}</div>` : ""}
+        ${tips ? `<h6 class="mt-2 mb-1"><i class="bi bi-lightbulb me-1 text-warning"></i>Practical Tips</h6><ul class="mb-0 small">${tips}</ul>` : ""}
+      </div>`;
+  }).join("");
+
+  body.innerHTML = `
+    <ul class="nav nav-tabs mb-3">${tabNav}</ul>
+    <div class="tab-content">${tabContent}</div>
+  `;
+  showSection("sec-transport");
+}
+
+function renderHotels(data) {
+  const body = document.getElementById("hotels-body");
+  const cities = (data.cities || []).filter(c => c.hotels && c.hotels.length);
+  if (!cities.length) {
+    body.innerHTML = "<p class='text-muted'>No 4★+ hotels found for your destinations.</p>";
+    showSection("sec-hotels");
+    return;
+  }
+
+  const tabNav = cities.map((c, i) =>
+    `<li class="nav-item"><a class="nav-link ${i===0?'active':''}" data-bs-toggle="tab" href="#hotel-city-${i}">${c.city}</a></li>`
+  ).join("");
+
+  const tabContent = cities.map((c, i) => {
+    const dateRange = (c.check_in && c.check_out)
+      ? `<div class="text-muted small mb-3"><i class="bi bi-calendar-range me-1"></i>${c.check_in} → ${c.check_out}</div>`
+      : "";
+
+    const hotelCards = c.hotels.map(h => {
+      const stars = "★".repeat(h.star_class || 4) + "☆".repeat(5 - (h.star_class || 4));
+      const rating = h.overall_rating
+        ? `<span class="badge ms-2" style="background:#0d9488">${h.overall_rating} ★</span>`
+        : "";
+      const reviews = h.reviews ? `<span class="text-muted small ms-1">(${h.reviews.toLocaleString()} reviews)</span>` : "";
+      const price = h.price_per_night
+        ? `<span class="fw-bold text-success ms-auto">${h.price_per_night}<span class="text-muted fw-normal">/night</span></span>`
+        : "";
+      const amenities = (h.amenities || []).map(a =>
+        `<span class="badge bg-light text-dark border me-1 mb-1" style="font-size:.72rem">${a}</span>`
+      ).join("");
+      const desc = h.description
+        ? `<p class="text-muted small mb-2">${h.description}</p>` : "";
+      const link = h.link
+        ? `<a href="${h.link}" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm mt-1">
+             <i class="bi bi-box-arrow-up-right me-1"></i>View on Google Hotels
+           </a>` : "";
+
+      return `
+        <div class="border rounded p-3 mb-3">
+          <div class="d-flex align-items-start flex-wrap gap-2 mb-1">
+            <div class="flex-grow-1">
+              <strong>${h.name}</strong>
+              ${rating}${reviews}
+            </div>
+            ${price}
+          </div>
+          <div class="text-warning mb-2" style="font-size:.85rem">${stars}</div>
+          ${desc}
+          <div class="mb-2">${amenities}</div>
+          ${link}
+        </div>`;
+    }).join("");
+
+    return `
+      <div class="tab-pane fade ${i===0?'show active':''}" id="hotel-city-${i}">
+        ${dateRange}
+        ${hotelCards}
+      </div>`;
+  }).join("");
+
+  body.innerHTML = `
+    <ul class="nav nav-tabs mb-3">${tabNav}</ul>
+    <div class="tab-content">${tabContent}</div>
+  `;
+  showSection("sec-hotels");
+}
+
+// ── Send message ──────────────────────────────────────────
+
+msgForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = msgInput.value.trim();
+  if (!text) return;
+
+  addBubble("user", text);
+  msgInput.value = "";
+  sendBtn.disabled = true;
+  msgInput.disabled = true;
+  showTyping(true);
+
+  try {
+    const resp = await fetch(MSG_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text }),
+    });
+    const data = await resp.json();
+
+    showTyping(false);
+    sendBtn.disabled = false;
+    msgInput.disabled = false;
+
+    if (data.error) {
+      addBubble("assistant", "Sorry, something went wrong: " + data.error);
+      return;
+    }
+
+    addBubble("assistant", data.reply);
+
+    if (data.plan_ready) {
+      startGeneration();
+    } else {
+      msgInput.focus();
+    }
+  } catch (err) {
+    showTyping(false);
+    sendBtn.disabled = false;
+    msgInput.disabled = false;
+    addBubble("assistant", "Network error. Please try again.");
+  }
+});
+
+// Allow Shift+Enter for newline, Enter to submit
+msgInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    msgForm.dispatchEvent(new Event("submit"));
+  }
+});
+
+// ── Plan generation via SSE ───────────────────────────────
+
+function startGeneration() {
+  setStatus("Searching for flights...");
+  const es = new EventSource(GEN_URL);
+
+  es.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+
+    if (msg.type === "status") {
+      statusText.textContent = msg.message;
+    } else if (msg.type === "section") {
+      const sec = msg.data;
+      if (sec.section === "route") renderRoute(sec);
+      else if (sec.section === "flights") renderFlights(sec);
+      else if (sec.section === "itinerary") renderItinerary(sec);
+      else if (sec.section === "budget") renderBudget(sec);
+      else if (sec.section === "destinations") renderDestinations(sec);
+      else if (sec.section === "connections") renderConnections(sec);
+      else if (sec.section === "hotels") renderHotels(sec);
+      else if (sec.section === "transport") renderTransport(sec);
+    } else if (msg.type === "done") {
+      es.close();
+      statusBanner.classList.remove("active");
+      document.getElementById("new-trip-btn").style.display = "block";
+      document.getElementById("new-trip-btn").scrollIntoView({ behavior: "smooth" });
+    } else if (msg.type === "error") {
+      es.close();
+      statusBanner.innerHTML = `<i class="bi bi-exclamation-triangle me-2"></i>${msg.message}`;
+      statusBanner.classList.replace("alert-info", "alert-danger");
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    statusText.textContent = "Connection lost. Please refresh.";
+  };
+}
+
+// ── Auto-start if session is already in searching/generating state ──
+{% if session.status in ['searching', 'generating'] %}
+startGeneration();
+{% endif %}
+
+// ── Show action bar immediately if plan is already done ──
+{% if session.status == 'done' %}
+document.getElementById("new-trip-btn").style.display = "block";
+{% endif %}
+
+// ── Auto-scroll on load ───────────────────────────────────
+chatBox.scrollTop = chatBox.scrollHeight;
+</script>
+{% endblock %}

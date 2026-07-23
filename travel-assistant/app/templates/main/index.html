@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Travel Assistant — Plan Your Trip{% endblock %}
+
+{% block extra_style %}
+.hero { background: linear-gradient(135deg, #0d6efd 0%, #0dcaf0 100%); color: white; padding: 4rem 0; }
+.feature-icon { font-size: 2rem; color: #0d6efd; }
+.path-card {
+  border: 2px solid transparent;
+  transition: border-color .2s, transform .2s, box-shadow .2s;
+  cursor: pointer;
+}
+.path-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+.path-card.plan:hover { border-color: #0d6efd; }
+.path-card.discover:hover { border-color: #198754; }
+.path-icon { font-size: 2.5rem; }
+{% endblock %}
+
+{% block content %}
+<section class="hero text-center">
+  <div class="container">
+    <h1 class="display-4 fw-bold mb-3">
+      <i class="bi bi-airplane-fill me-3"></i>Travel Assistant
+    </h1>
+    <p class="lead mb-0">
+      Real flights. Smart itineraries. Destination discovery.
+    </p>
+  </div>
+</section>
+
+<div class="container py-5">
+  <h5 class="text-center text-muted mb-4">How would you like to start?</h5>
+  <div class="row g-4 justify-content-center">
+
+    <!-- Path A: I know where I'm going -->
+    <div class="col-md-5">
+      <div class="card h-100 path-card plan shadow-sm">
+        <div class="card-body text-center p-4">
+          <div class="path-icon text-primary mb-3"><i class="bi bi-geo-alt-fill"></i></div>
+          <h4 class="fw-bold mb-2">I know where I'm going</h4>
+          <p class="text-muted mb-4">Tell me your destination. I'll search real flights, build a day-by-day itinerary, and break down the budget.</p>
+          <form action="{{ url_for('main.new_trip') }}" method="post">
+            <button type="submit" class="btn btn-primary btn-lg px-4">
+              <i class="bi bi-chat-dots-fill me-2"></i>Plan My Trip
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Path B: Help me decide -->
+    <div class="col-md-5">
+      <div class="card h-100 path-card discover shadow-sm">
+        <div class="card-body text-center p-4">
+          <div class="path-icon text-success mb-3"><i class="bi bi-compass"></i></div>
+          <h4 class="fw-bold mb-2">Help me decide</h4>
+          <p class="text-muted mb-4">Not sure where to go? Tell me what you love — food, history, adventure, beaches — and I'll suggest destinations tailored to you.</p>
+          <form action="{{ url_for('main.new_discover') }}" method="post">
+            <button type="submit" class="btn btn-success btn-lg px-4">
+              <i class="bi bi-stars me-2"></i>Discover Destinations
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Feature strip -->
+  <div class="row g-4 text-center mt-4">
+    <div class="col-md-4">
+      <div class="feature-icon mb-2"><i class="bi bi-chat-left-text"></i></div>
+      <h6>Conversational</h6>
+      <p class="text-muted small">No forms. Just chat — I'll ask the right questions.</p>
+    </div>
+    <div class="col-md-4">
+      <div class="feature-icon mb-2"><i class="bi bi-search"></i></div>
+      <h6>Real Flights</h6>
+      <p class="text-muted small">Live prices from Google Flights — not estimates.</p>
+    </div>
+    <div class="col-md-4">
+      <div class="feature-icon mb-2"><i class="bi bi-map"></i></div>
+      <h6>Complete Plan</h6>
+      <p class="text-muted small">Route, flights, itinerary, budget, and destination guides.</p>
+    </div>
+  </div>
+
+  <div class="text-center mt-3">
+    <a href="{{ url_for('main.trips') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-clock-history me-1"></i>View Past Trips
+    </a>
+  </div>
+</div>
+{% endblock %}

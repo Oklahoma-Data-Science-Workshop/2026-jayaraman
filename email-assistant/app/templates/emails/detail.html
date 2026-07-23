@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}{{ email.subject }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-3">
+        <a href="{{ url_for('emails.list') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Inbox
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0">{{ email.subject or '(No Subject)' }}</h4>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="row mb-2">
+                        <div class="col-3 text-muted">From:</div>
+                        <div class="col-9">{{ email.sender_name or email.sender_email }}</div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-3 text-muted">To:</div>
+                        <div class="col-9">{{ email.recipient }}</div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-3 text-muted">Date:</div>
+                        <div class="col-9">{{ email.received_at.strftime('%B %d, %Y at %H:%M') }}</div>
+                    </div>
+                    <div class="row">
+                        <div class="col-3 text-muted">Tags:</div>
+                        <div class="col-9">
+                            <span class="badge badge-{{ email.urgency }} me-2">{{ email.urgency }}</span>
+                            <span class="badge bg-secondary me-2">{{ email.topic }}</span>
+                            {% if email.email_type %}
+                            <span class="badge bg-info">{{ email.email_type }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {% if email.summary %}
+                <div class="alert alert-info">
+                    <h6>🤖 AI Summary:</h6>
+                    <p class="mb-0">{{ email.summary }}</p>
+                </div>
+                {% endif %}
+
+                {% if email.key_points_list %}
+                <div class="mb-3">
+                    <h6>Key Points:</h6>
+                    <ul>
+                        {% for point in email.key_points_list %}
+                        <li>{{ point }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                <hr>
+
+                <div class="email-body">
+                    <pre style="white-space: pre-wrap; font-family: inherit;">{{ email.body_text or email.snippet }}</pre>
+                </div>
+
+                {% if email.attachments.count() > 0 %}
+                <hr>
+                <div>
+                    <h6>📎 Attachments ({{ email.attachments.count() }}):</h6>
+                    <ul class="list-unstyled">
+                        {% for att in email.attachments %}
+                        <li class="mb-2">
+                            <i class="bi bi-file-earmark"></i> {{ att.filename }} ({{ (att.size / 1024) | int }} KB)
+                            {% if att.nextcloud_share_link %}
+                            <a href="{{ att.nextcloud_share_link }}" target="_blank" class="btn btn-sm btn-outline-primary ms-2">
+                                <i class="bi bi-cloud-download"></i> View in Nextcloud
+                            </a>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                {% if email.action_items.count() > 0 %}
+                <hr>
+                <div>
+                    <h6>✅ Action Items:</h6>
+                    <ul>
+                        {% for action in email.action_items %}
+                        <li>
+                            <strong>{{ action.type.title() }}:</strong> {{ action.description }}
+                            {% if action.due_date %}
+                            <br><small class="text-muted">Due: {{ action.due_date.strftime('%B %d, %Y') }}</small>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                <div class="mt-4">
+                    <form action="{{ url_for('emails.archive', id=email.id) }}" method="POST" class="d-inline">
+                        <button type="submit" class="btn btn-outline-secondary">Archive</button>
+                    </form>
+                    {% if not email.is_read %}
+                    <form action="{{ url_for('emails.mark_read', id=email.id) }}" method="POST" class="d-inline">
+                        <button type="submit" class="btn btn-outline-primary">Mark as Read</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">Email Info</h6>
+            </div>
+            <div class="card-body">
+                <p class="mb-2"><strong>ID:</strong> {{ email.id }}</p>
+                <p class="mb-2"><strong>Status:</strong> {{ email.status }}</p>
+                <p class="mb-2"><strong>Read:</strong> {{ 'Yes' if email.is_read else 'No' }}</p>
+                <p class="mb-2"><strong>Archived:</strong> {{ 'Yes' if email.is_archived else 'No' }}</p>
+                {% if email.is_vip_sender %}
+                <p class="mb-2"><span class="badge bg-warning">⭐ VIP Sender</span></p>
+                {% endif %}
+                {% if email.requires_response %}
+                <p class="mb-0"><span class="badge bg-danger">📝 Response Required</span></p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

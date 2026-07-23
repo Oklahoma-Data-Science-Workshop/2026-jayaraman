@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Triage{% endblock %}
+{% block extra_css %}
+<style>
+  .cc-card{background:var(--bg-card);border:1px solid var(--border-color);border-radius:12px;margin-bottom:16px;overflow:hidden}
+  .cc-card > h6{font-size:13px;font-weight:700;margin:0;padding:13px 15px 10px;display:flex;align-items:center;gap:9px}
+  .cc-card > h6 .cnt{font-size:11px;color:var(--text-secondary);background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:20px;padding:1px 8px}
+  .dotlab{width:9px;height:9px;border-radius:50%;flex:none}
+  .mail{display:block;position:relative;padding:12px 15px 12px 19px;border-top:1px solid var(--border-color)}
+  .mail::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:3px;background:var(--sv,#6b7280)}
+  .mail .r1{display:flex;align-items:center;gap:9px}
+  .mail .subj{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-primary);text-decoration:none}
+  .mail .subj:hover{color:var(--accent)}
+  .topic{font-size:10px;font-weight:600;color:#fff;padding:2px 8px;border-radius:20px;white-space:nowrap}
+  .reply{font-size:10px;font-weight:700;color:#3b82f6;background:#3b82f622;border-radius:6px;padding:2px 7px;white-space:nowrap}
+  .mail .from{font-size:12.5px;color:var(--text-secondary);margin:3px 0 5px}
+  .mail .snip{font-size:12.5px;color:var(--text-secondary);opacity:.9;line-height:1.45}
+  .acts{display:flex;gap:8px;margin-top:9px}
+  .acts .a{font-size:12px;font-weight:600;padding:4px 12px;border-radius:8px;cursor:pointer;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-secondary);text-decoration:none}
+  .acts .a:hover{color:var(--text-primary);border-color:#3a4a63}
+  .acts .go{background:var(--accent);border-color:var(--accent);color:#000}
+  .acts .go:hover{color:#000;filter:brightness(1.05)}
+</style>
+{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <h3 class="mb-0">🔺 Triage</h3>
+  <span class="ms-3 text-secondary">work the queue top-down · archive to dismiss</span>
+</div>
+
+{% if not groups %}
+  <div class="card p-4 text-secondary">Inbox zero on the urgent stuff. 🎉 Nothing needs triage right now.</div>
+{% endif %}
+
+{% for key, label, color, emails in groups %}
+<div class="cc-card">
+  <h6><span class="dotlab" style="background:{{ color }}"></span>{{ label }} <span class="cnt">{{ emails|length }}</span></h6>
+  {% for e in emails %}
+    <div class="mail" style="--sv:{{ color }}">
+      <div class="r1">
+        <a class="subj" href="{{ url_for('emails.detail', id=e.id) }}">{{ e.subject or '(no subject)' }}</a>
+        <span class="topic" style="background:{{ topic_colors.get(e.topic, '#6b7280') }}">{{ e.topic }}</span>
+        {% if e.vendor_category %}<span class="topic" style="background:{{ vendor_colors.get(e.vendor_category, '#6b7280') }}">{{ e.vendor_category }}</span>{% endif %}
+        {% if e.requires_response %}<span class="reply">↩ reply</span>{% endif %}
+      </div>
+      <div class="from">{{ e.sender_name or e.sender_email }}</div>
+      {% if e.summary %}<div class="snip">{{ e.summary|truncate(200) }}</div>{% endif %}
+      <div class="acts">
+        <a class="a go" href="{{ url_for('emails.detail', id=e.id) }}">Open</a>
+        <button class="a arch" data-url="{{ url_for('main.triage_archive', id=e.id) }}">Archive</button>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endfor %}
+
+{% if rest %}
+  <p class="text-secondary small mt-2">+ {{ rest }} lower-priority email{{ '' if rest == 1 else 's' }} — browse in
+    <a href="{{ url_for('emails.list') }}" style="color:var(--accent)">All Emails</a> or the
+    <a href="{{ url_for('main.digest') }}" style="color:var(--accent)">Vendor Digest</a>.</p>
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+<script>
+  document.querySelectorAll('.arch').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var url = b.dataset.url;
+      b.disabled = true; b.textContent = 'Archiving…';
+      fetch(url, { method: 'POST', headers: { 'X-Requested-With': 'fetch' } })
+        .then(function (r) { return r.json(); })
+        .then(function () {
+          var row = b.closest('.mail');
+          row.style.transition = 'opacity .2s'; row.style.opacity = '0';
+          setTimeout(function () { row.remove(); }, 200);
+        })
+        .catch(function () { b.disabled = false; b.textContent = 'Archive'; });
+    });
+  });
+</script>
+{% endblock %}
